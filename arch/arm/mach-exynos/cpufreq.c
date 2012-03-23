@@ -100,28 +100,12 @@ static int exynos_target(struct cpufreq_policy *policy,
 	if (exynos_cpufreq_disable)
 		goto out;
 
-	freqs.old = exynos_getspeed(policy->cpu);
+	freqs.old = policy->cur;
 
-	if(policy->max < freqs.old || policy->min > freqs.old)
-	{
-		struct cpufreq_policy policytemp;
-		memcpy(&policytemp, policy, sizeof(struct cpufreq_policy));
-		if(policytemp.max < freqs.old)
-			policytemp.max = freqs.old;
-		if(policytemp.min > freqs.old)
-			policytemp.min = freqs.old;
-		if (cpufreq_frequency_table_target(&policytemp, freq_table,
-						   freqs.old, relation, &old_index)) {
-			ret = -EINVAL;
-			goto out;
-		}
-	} else
-	{
-		if (cpufreq_frequency_table_target(policy, freq_table,
-						   freqs.old, relation, &old_index)) {
-			ret = -EINVAL;
-			goto out;
-		}
+	if (cpufreq_frequency_table_target(policy, freq_table,
+					   freqs.old, relation, &old_index)) {
+		ret = -EINVAL;
+		goto out;
 	}
 
 	if (cpufreq_frequency_table_target(policy, freq_table,
@@ -560,7 +544,13 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		cpumask_setall(policy->cpus);
 	}
 
-	return cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+	cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+
+	/* Safe default startup limits */
+	policy->max = 1200000;
+	policy->min = 200000;
+
+	return 0;
 }
 
 static int exynos_cpufreq_reboot_notifier_call(struct notifier_block *this,
@@ -580,12 +570,6 @@ static struct notifier_block exynos_cpufreq_reboot_notifier = {
 	.notifier_call = exynos_cpufreq_reboot_notifier_call,
 };
 
-/* Make sure we populate scaling_available_freqs in sysfs - netarchy */
-static struct freq_attr *exynos_cpufreq_attr[] = {
-  &cpufreq_freq_attr_scaling_available_freqs,
-  NULL,
-};
-
 static struct cpufreq_driver exynos_driver = {
 	.flags		= CPUFREQ_STICKY,
 	.verify		= exynos_verify_speed,
@@ -593,7 +577,6 @@ static struct cpufreq_driver exynos_driver = {
 	.get		= exynos_getspeed,
 	.init		= exynos_cpufreq_cpu_init,
 	.name		= "exynos_cpufreq",
-	.attr           = exynos_cpufreq_attr,
 #ifdef CONFIG_PM
 	.suspend	= exynos_cpufreq_suspend,
 	.resume		= exynos_cpufreq_resume,
@@ -668,54 +651,3 @@ err_vdd_arm:
 	return -EINVAL;
 }
 late_initcall(exynos_cpufreq_init);
-
-ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
-{
-	int i, len = 0;
-	if (buf)
-	{
-		for (i = exynos_info->max_support_idx; i<=exynos_info->min_support_idx; i++)
-		{
-			if(exynos_info->freq_table[i].frequency==CPUFREQ_ENTRY_INVALID) continue;
-			len += sprintf(buf + len, "%dmhz: %d mV\n", exynos_info->freq_table[i].frequency/1000,exynos_info->volt_table[i]/1000);
-		}
-	}
-	return len;
-}
-
-ssize_t store_UV_mV_table(struct cpufreq_policy *policy,
-                                      const char *buf, size_t count)
-{
-	unsigned int ret = -EINVAL;
-	int i = 0;
-	int j = 0;
-	int u[6];
-	ret = sscanf(buf, "%d %d %d %d %d %d", &u[0], &u[1], &u[2], &u[3], &u[4], &u[5]);
-	if(ret != 6) {
-		ret = sscanf(buf, "%d %d %d %d %d", &u[0], &u[1], &u[2], &u[3], &u[4]);
-		if(ret != 5) {
-			ret = sscanf(buf, "%d %d %d %d", &u[0], &u[1], &u[2], &u[3]);
-			if( ret != 4) return -EINVAL;
-		}
-	}
-
-	for( i = 0; i < 6; i++ )
-	{
-		if (u[i] > CPU_UV_MV_MAX / 1000)
-		{
-			u[i] = CPU_UV_MV_MAX / 1000;
-		}
-		else if (u[i] < CPU_UV_MV_MIN / 1000)
-		{
-			u[i] = CPU_UV_MV_MIN / 1000;
-		}
-	}
-
-	for( i = 0; i < ret; i++)
-	{
-		while(exynos_info->freq_table[i+j].frequency==CPUFREQ_ENTRY_INVALID)
-			j++;
-		exynos_info->volt_table[i+j] = u[i]*1000;
-	}
-	return count;
-}

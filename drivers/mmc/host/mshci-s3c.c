@@ -503,12 +503,7 @@ static int __devinit mshci_s3c_probe(struct platform_device *pdev)
 	if (pdata->cd_type == S3C_MSHCI_CD_GPIO &&
 		gpio_is_valid(pdata->ext_cd_gpio)) {
 
-		ret = gpio_request(pdata->ext_cd_gpio, "MSHCI EXT CD");
-		if (ret) {
-			dev_err(&pdev->dev, "cannot request gpio for card detect\n");
-			goto err_add_host;
-		}
-
+		gpio_request(pdata->ext_cd_gpio, "SDHCI EXT CD");
 		sc->ext_cd_gpio = pdata->ext_cd_gpio;
 
 		sc->ext_cd_irq = gpio_to_irq(pdata->ext_cd_gpio);
@@ -528,9 +523,6 @@ static int __devinit mshci_s3c_probe(struct platform_device *pdev)
 		dev_err(dev, "mshci_add_host() failed\n");
 		goto err_add_host;
 	}
-
-	device_enable_async_suspend(dev);
-
 	return 0;
 
  err_add_host:
@@ -584,6 +576,7 @@ static int mshci_s3c_resume(struct platform_device *dev)
 	return 0;
 }
 
+#if 0
 static void mshci_s3c_shutdown(struct platform_device *dev, pm_message_t pm)
 {
 	struct mshci_host *host = platform_get_drvdata(dev);
@@ -594,7 +587,7 @@ static void mshci_s3c_shutdown(struct platform_device *dev, pm_message_t pm)
 	if (pdata->shutdown)
 		pdata->shutdown();
 }
-
+#endif
 
 #else
 #define mshci_s3c_suspend NULL
